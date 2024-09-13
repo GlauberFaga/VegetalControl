@@ -1,0 +1,873 @@
+<html><head><base href="https://yourdomain.com/"><title>Sistema de Controle de Vegetal - Multiusuário</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+  [v-cloak] { display: none; }
+</style>
+</head>
+<body class="bg-gray-100">
+<div id="app" v-cloak>
+  <nav class="bg-green-600 p-4">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-white text-2xl font-bold">Controle de Vegetal</h1>
+      <div v-if="currentUser">
+        <span class="text-white mr-4">Olá, {{ currentUser.name }}</span>
+        <button @click="logout" class="bg-white text-green-600 px-4 py-2 rounded">Sair</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mx-auto mt-8">
+    <div v-if="!currentUser" class="bg-white p-8 rounded shadow-md">
+      <h2 class="text-2xl mb-4">Login</h2>
+      <form @submit.prevent="login">
+        <div class="mb-4">
+          <label class="block mb-2">Usuário:</label>
+          <input v-model="loginForm.username" type="text" class="w-full p-2 border rounded" required>
+        </div>
+        <div class="mb-4">
+          <label class="block mb-2">Senha:</label>
+          <input v-model="loginForm.password" type="password" class="w-full p-2 border rounded" required>
+        </div>
+        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Entrar</button>
+      </form>
+      <div class="mt-4">
+        <button @click="showRegistrationForm = true" class="bg-blue-500 text-white px-4 py-2 rounded">Criar Conta</button>
+      </div>
+    </div>
+
+    <div v-if="showRegistrationForm" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+      <div class="bg-white p-8 rounded shadow-md max-w-md w-full">
+        <h2 class="text-2xl mb-4">Criar Conta</h2>
+        <form @submit.prevent="registerUser">
+          <div class="mb-4">
+            <label class="block mb-2">Nome:</label>
+            <input v-model="registrationForm.name" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Usuário:</label>
+            <input v-model="registrationForm.username" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Senha:</label>
+            <input v-model="registrationForm.password" type="password" class="w-full p-2 border rounded" required>
+          </div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded mr-2">Registrar</button>
+          <button @click="showRegistrationForm = false" class="bg-gray-500 text-white px-4 py-2 rounded">Cancelar</button>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="currentUser">
+      <div class="mb-8">
+        <button v-if="availableMenuItems.includes(1)" @click="currentView = 'userManagement'" class="bg-blue-500 text-white px-4 py-2 rounded mr-2">Gerenciar Usuários</button>
+        <button v-if="availableMenuItems.includes(2)" @click="currentView = 'nucleoManagement'" class="bg-purple-500 text-white px-4 py-2 rounded mr-2">Gerenciar Núcleos</button>
+        <button v-if="availableMenuItems.includes(3)" @click="currentView = 'vegetalMovement'" class="bg-green-500 text-white px-4 py-2 rounded mr-2">Movimentação de Vegetal</button>
+        <button v-if="availableMenuItems.includes(4)" @click="currentView = 'report'" class="bg-yellow-500 text-white px-4 py-2 rounded">Relatório</button>
+        <button v-if="availableMenuItems.includes(5)" @click="currentView = 'accessLevelManagement'" class="bg-indigo-500 text-white px-4 py-2 rounded mr-2">Nível de Acesso</button>
+        <button v-if="availableMenuItems.includes(6)" @click="currentView = 'dashboard'" class="bg-blue-500 text-white px-4 py-2 rounded mr-2">Dashboard</button>
+      </div>
+
+      <div v-if="currentView === 'dashboard' && availableMenuItems.includes(6)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Dashboard</h2>
+        <div class="mb-4 flex space-x-4">
+          <div>
+            <label class="block mb-2">Dados do núcleo:</label>
+            <select v-model="selectedDashboardNucleo" class="w-full p-2 border rounded">
+              <option value="all">Todos os núcleos</option>
+              <option v-for="nucleo in userNuculos" :key="nucleo.id" :value="nucleo.id">{{ nucleo.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block mb-2">Data Inicial:</label>
+            <input v-model="dashboardStartDate" type="date" class="w-full p-2 border rounded">
+          </div>
+          <div>
+            <label class="block mb-2">Data Final:</label>
+            <input v-model="dashboardEndDate" type="date" class="w-full p-2 border rounded">
+          </div>
+          <div class="flex items-end">
+            <button @click="generateDashboard" class="bg-blue-500 text-white px-4 py-2 rounded">Gerar Dashboard</button>
+          </div>
+        </div>
+
+        <div v-if="dashboardData.totalEntrada !== undefined" class="grid grid-cols-2 gap-4 mb-8">
+          <div class="bg-green-100 p-4 rounded">
+            <h3 class="text-lg font-semibold mb-2">Total de Entrada</h3>
+            <p class="text-3xl font-bold">{{ dashboardData.totalEntrada.toFixed(2) }}</p>
+          </div>
+          <div class="bg-red-100 p-4 rounded">
+            <h3 class="text-lg font-semibold mb-2">Total de Saída</h3>
+            <p class="text-3xl font-bold">{{ dashboardData.totalSaida.toFixed(2) }}</p>
+          </div>
+          <div class="bg-blue-100 p-4 rounded">
+            <h3 class="text-lg font-semibold mb-2">Saldo</h3>
+            <p class="text-3xl font-bold">{{ dashboardData.saldo.toFixed(2) }}</p>
+          </div>
+          <div class="bg-yellow-100 p-4 rounded">
+            <h3 class="text-lg font-semibold mb-2">Total de Pessoas</h3>
+            <p class="text-3xl font-bold">{{ dashboardData.totalPessoas }}</p>
+          </div>
+        </div>
+
+        <div v-if="dashboardData.evolution && dashboardData.evolution.length > 0">
+          <h3 class="text-xl mb-4">Evolução por Período</h3>
+          <canvas id="evolutionChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+
+      <div v-if="currentView === 'userManagement' && availableMenuItems.includes(1)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Gerenciamento de Usuários</h2>
+        <form @submit.prevent="saveUser">
+          <div class="mb-4">
+            <label class="block mb-2">Nome:</label>
+            <input v-model="userForm.name" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Usuário:</label>
+            <input v-model="userForm.username" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Senha:</label>
+            <input v-model="userForm.password" type="password" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Nível de Acesso:</label>
+            <select v-model="userForm.accessLevelId" class="w-full p-2 border rounded" required>
+              <option v-for="level in accessLevels" :key="level.id" :value="level.id">{{ level.name }}</option>
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Núcleos:</label>
+            <select v-model="userForm.nucleos" multiple class="w-full p-2 border rounded">
+              <option v-for="nucleo in nucleos" :key="nucleo.id" :value="nucleo.id">{{ nucleo.name }}</option>
+            </select>
+          </div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">{{ editingUserId ? 'Atualizar' : 'Salvar' }} Usuário</button>
+        </form>
+
+        <div class="mt-8">
+          <h3 class="text-xl mb-4">Lista de Usuários</h3>
+          <table class="w-full border-collapse border border-gray-300">
+            <thead>
+              <tr>
+                <th class="border border-gray-300 p-2">Nome</th>
+                <th class="border border-gray-300 p-2">Usuário</th>
+                <th class="border border-gray-300 p-2">Nível de Acesso</th>
+                <th class="border border-gray-300 p-2">Núcleos</th>
+                <th class="border border-gray-300 p-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in users" :key="user.id">
+                <td class="border border-gray-300 p-2">{{ user.name }}</td>
+                <td class="border border-gray-300 p-2">{{ user.username }}</td>
+                <td class="border border-gray-300 p-2">{{ accessLevels.find(level => level.id === user.accessLevelId).name }}</td>
+                <td class="border border-gray-300 p-2">{{ user.nucleos.map(id => nucleos.find(n => n.id === id).name).join(', ') }}</td>
+                <td class="border border-gray-300 p-2">
+                  <button @click="editUser(user)" class="bg-blue-500 text-white px-2 py-1 rounded mr-2">Editar</button>
+                  <button @click="deleteUser(user.id)" class="bg-red-500 text-white px-2 py-1 rounded">Excluir</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="currentView === 'nucleoManagement' && availableMenuItems.includes(2)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Gerenciamento de Núcleos</h2>
+        <form @submit.prevent="saveNucleo">
+          <div class="mb-4">
+            <label class="block mb-2">Nome do Núcleo:</label>
+            <input v-model="nucleoForm.name" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Região:</label>
+            <input v-model="nucleoForm.region" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Endereço:</label>
+            <textarea v-model="nucleoForm.address" class="w-full p-2 border rounded" required></textarea>
+          </div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">{{ editingNucleoId ? 'Atualizar' : 'Salvar' }} Núcleo</button>
+        </form>
+
+        <div class="mt-8">
+          <h3 class="text-xl mb-4">Lista de Núcleos</h3>
+          <table class="w-full border-collapse border border-gray-300">
+            <thead>
+              <tr>
+                <th class="border border-gray-300 p-2">Nome</th>
+                <th class="border border-gray-300 p-2">Região</th>
+                <th class="border border-gray-300 p-2">Endereço</th>
+                <th class="border border-gray-300 p-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="nucleo in nucleos" :key="nucleo.id">
+                <td class="border border-gray-300 p-2">{{ nucleo.name }}</td>
+                <td class="border border-gray-300 p-2">{{ nucleo.region }}</td>
+                <td class="border border-gray-300 p-2">{{ nucleo.address }}</td>
+                <td class="border border-gray-300 p-2">
+                  <button @click="editNucleo(nucleo)" class="bg-blue-500 text-white px-2 py-1 rounded mr-2">Editar</button>
+                  <button @click="deleteNucleo(nucleo.id)" class="bg-red-500 text-white px-2 py-1 rounded">Excluir</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="currentView === 'vegetalMovement' && availableMenuItems.includes(3)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Movimentação de Vegetal</h2>
+        <div class="mb-4">
+          <label class="block mb-2">Selecione o Núcleo:</label>
+          <select v-model="selectedNucleo" class="w-full p-2 border rounded" @change="loadVegetalMovements">
+            <option v-for="nucleo in userNuculos" :key="nucleo.id" :value="nucleo.id">{{ nucleo.name }}</option>
+          </select>
+        </div>
+        <form @submit.prevent="saveVegetalMovement" v-if="selectedNucleo">
+          <div class="mb-4">
+            <label class="block mb-2">Data:</label>
+            <input v-model="vegetalForm.date" type="date" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Vegetal:</label>
+            <input v-model="vegetalForm.vegetal" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Entrada:</label>
+            <input v-model="vegetalForm.entrada" type="number" step="0.01" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Saída:</label>
+            <input v-model="vegetalForm.saida" type="number" step="0.01" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Saldo:</label>
+            <input v-model="vegetalForm.saldo" type="number" step="0.01" class="w-full p-2 border rounded" disabled>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Sessão:</label>
+            <input v-model="vegetalForm.sessao" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Nº de Pessoas:</label>
+            <input v-model="vegetalForm.numPessoas" type="number" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Auxiliar:</label>
+            <input v-model="vegetalForm.auxiliar" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">M. Assistente:</label>
+            <input v-model="vegetalForm.mAssistente" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">M. Representante:</label>
+            <input v-model="vegetalForm.mRepresentante" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">{{ editingMovementId ? 'Atualizar' : 'Salvar' }} Movimentação</button>
+        </form>
+
+        <div class="mt-8" v-if="selectedNucleo">
+          <h3 class="text-xl mb-4">Lista de Movimentações</h3>
+          <table class="w-full border-collapse border border-gray-300">
+            <thead>
+              <tr>
+                <th class="border border-gray-300 p-2">Data</th>
+                <th class="border border-gray-300 p-2">Vegetal</th>
+                <th class="border border-gray-300 p-2">Entrada</th>
+                <th class="border border-gray-300 p-2">Saída</th>
+                <th class="border border-gray-300 p-2">Saldo</th>
+                <th class="border border-gray-300 p-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="movement in vegetalMovements" :key="movement.id">
+                <td class="border border-gray-300 p-2">{{ movement.date }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.vegetal }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.entrada }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.saida }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.saldo }}</td>
+                <td class="border border-gray-300 p-2">
+                  <button @click="editMovement(movement)" class="bg-blue-500 text-white px-2 py-1 rounded mr-2">Editar</button>
+                  <button @click="deleteMovement(movement.id)" class="bg-red-500 text-white px-2 py-1 rounded">Excluir</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="currentView === 'report' && availableMenuItems.includes(4)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Relatório de Movimentação de Vegetal</h2>
+        <div class="mb-4">
+          <label class="block mb-2">Selecione o Núcleo:</label>
+          <select v-model="selectedNucleo" class="w-full p-2 border rounded" @change="loadVegetalMovements">
+            <option v-for="nucleo in userNuculos" :key="nucleo.id" :value="nucleo.id">{{ nucleo.name }}</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="block mb-2">Data Inicial:</label>
+          <input v-model="reportStartDate" type="date" class="w-full p-2 border rounded">
+        </div>
+        <div class="mb-4">
+          <label class="block mb-2">Data Final:</label>
+          <input v-model="reportEndDate" type="date" class="w-full p-2 border rounded">
+        </div>
+        <button @click="generateReport" class="bg-blue-500 text-white px-4 py-2 rounded mr-2">Gerar Relatório</button>
+        <button @click="generatePDF" class="bg-green-500 text-white px-4 py-2 rounded">Gerar PDF</button>
+
+        <div v-if="reportData.length > 0" class="mt-8">
+          <h3 class="text-xl mb-4 text-center font-bold">FICHA DE CONTROLE DE VEGETAL</h3>
+          <h4 class="text-lg mb-4 text-center">{{ selectedNucleoName }}</h4>
+          <table class="w-full border-collapse border border-gray-300">
+            <thead>
+              <tr>
+                <th class="border border-gray-300 p-2">Data</th>
+                <th class="border border-gray-300 p-2">Vegetal</th>
+                <th class="border border-gray-300 p-2">Entrada</th>
+                <th class="border border-gray-300 p-2">Saída</th>
+                <th class="border border-gray-300 p-2">Saldo</th>
+                <th class="border border-gray-300 p-2">Sessão</th>
+                <th class="border border-gray-300 p-2">Nº de Pessoas</th>
+                <th class="border border-gray-300 p-2">Auxiliar</th>
+                <th class="border border-gray-300 p-2">M. Assistente</th>
+                <th class="border border-gray-300 p-2">M. Representante</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="movement in reportData" :key="movement.date">
+                <td class="border border-gray-300 p-2">{{ movement.date }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.vegetal }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.entrada }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.saida }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.saldo }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.sessao }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.numPessoas }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.auxiliar }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.mAssistente }}</td>
+                <td class="border border-gray-300 p-2">{{ movement.mRepresentante }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="mt-8 flex justify-between">
+            <div>
+              <div class="border-t border-gray-300 w-48 pt-2">M. Assistente</div>
+            </div>
+            <div>
+              <div class="border-t border-gray-300 w-48 pt-2">M. Representante</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="currentView === 'accessLevelManagement' && availableMenuItems.includes(5)" class="bg-white p-8 rounded shadow-md">
+        <h2 class="text-2xl mb-4">Gerenciamento de Nível de Acesso</h2>
+        <form @submit.prevent="saveAccessLevel">
+          <div class="mb-4">
+            <label class="block mb-2">Nível de Acesso:</label>
+            <input v-model="accessLevelForm.name" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Legenda:</label>
+            <input v-model="accessLevelForm.description" type="text" class="w-full p-2 border rounded" required>
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2">Telas de Acesso:</label>
+            <div v-for="screen in availableScreens" :key="screen.id" class="flex items-center mb-2">
+              <input type="checkbox" v-model="accessLevelForm.screens" :value="screen.id" :id="'screen-' + screen.id" class="mr-2">
+              <label :for="'screen-' + screen.id">{{ screen.name }}</label>
+            </div>
+          </div>
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">{{ editingAccessLevelId ? 'Atualizar' : 'Salvar' }} Nível de Acesso</button>
+        </form>
+
+        <div class="mt-8">
+          <h3 class="text-xl mb-4">Lista de Níveis de Acesso</h3>
+          <table class="w-full border-collapse border border-gray-300">
+            <thead>
+              <tr>
+                <th class="border border-gray-300 p-2">Nível de Acesso</th>
+                <th class="border border-gray-300 p-2">Legenda</th>
+                <th class="border border-gray-300 p-2">Telas de Acesso</th>
+                <th class="border border-gray-300 p-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="level in accessLevels" :key="level.id">
+                <td class="border border-gray-300 p-2">{{ level.name }}</td>
+                <td class="border border-gray-300 p-2">{{ level.description }}</td>
+                <td class="border border-gray-300 p-2">{{ level.screens.map(id => availableScreens.find(s => s.id === id).name).join(', ') }}</td>
+                <td class="border border-gray-300 p-2">
+                  <button @click="editAccessLevel(level)" class="bg-blue-500 text-white px-2 py-1 rounded mr-2">Editar</button>
+                  <button @click="deleteAccessLevel(level.id)" class="bg-red-500 text-white px-2 py-1 rounded">Excluir</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+new Vue({
+  el: '#app',
+  data: {
+    currentUser: null,
+    currentView: 'dashboard',
+    loginForm: {
+      username: '',
+      password: ''
+    },
+    userForm: {
+      name: '',
+      username: '',
+      password: '',
+      nucleos: [],
+      accessLevelId: null
+    },
+    nucleoForm: {
+      name: '',
+      region: '',
+      address: ''
+    },
+    vegetalForm: {
+      date: '',
+      vegetal: '',
+      entrada: 0,
+      saida: 0,
+      saldo: 0,
+      sessao: '',
+      numPessoas: 0,
+      auxiliar: '',
+      mAssistente: '',
+      mRepresentante: ''
+    },
+    dashboardStartDate: '',
+    dashboardEndDate: '',
+    dashboardData: {},
+    nucleos: [],
+    selectedNucleo: null,
+    selectedDashboardNucleo: 'all',
+    vegetalMovements: [],
+    reportStartDate: '',
+    reportEndDate: '',
+    reportData: [],
+    selectedNucleoName: '',
+    users: [
+      { 
+        id: 0, 
+        name: 'Administrador', 
+        username: 'administrador', 
+        password: 'admin', 
+        nucleos: [], 
+        accessLevelId: 1  
+      },
+    ],
+    editingUserId: null,
+    editingNucleoId: null,
+    editingMovementId: null,
+    allVegetalMovements: [],
+    showRegistrationForm: false,
+    registrationForm: {
+      name: '',
+      username: '',
+      password: ''
+    },
+    accessLevelForm: {
+      name: '',
+      description: '',
+      screens: []
+    },
+    accessLevels: [],
+    editingAccessLevelId: null,
+    availableScreens: [
+      { id: 1, name: 'Gerenciar Usuários' },
+      { id: 2, name: 'Gerenciar Núcleos' },
+      { id: 3, name: 'Movimentação de Vegetal' },
+      { id: 4, name: 'Relatório' },
+      { id: 5, name: 'Nível de Acesso' },
+      { id: 6, name: 'Dashboard' }
+    ]
+  },
+  computed: {
+    userNuculos() {
+      if (this.currentUser) {
+        return this.nucleos.filter(nucleo => this.currentUser.nucleos.includes(nucleo.id));
+      }
+      return [];
+    },
+    userNucleosNames() {
+      return this.nucleos
+        .filter(nucleo => this.currentUser.nucleos.includes(nucleo.id))
+        .map(nucleo => nucleo.name)
+        .join(', ');
+    },
+    availableMenuItems() {
+      if (!this.currentUser || !this.currentUser.accessLevelId) return [];
+      const userAccessLevel = this.accessLevels.find(level => level.id === this.currentUser.accessLevelId);
+      if (!userAccessLevel) return [];
+      return userAccessLevel.screens;
+    }
+  },
+  methods: {
+    login() {
+      const user = this.users.find(u => u.username === this.loginForm.username && u.password === this.loginForm.password);
+      if (user) {
+        this.currentUser = {
+          name: user.name,
+          username: user.username,
+          nucleos: user.nucleos,
+          accessLevelId: user.accessLevelId
+        };
+        this.loadUserNucelos();
+        this.generateLast30DaysDashboard();
+      } else {
+        alert('Usuário ou senha inválidos');
+      }
+    },
+    logout() {
+      this.currentUser = null;
+      this.currentView = 'userManagement';
+    },
+    loadUserNucelos() {
+      this.userNuculos = this.nucleos.filter(nucleo => this.currentUser.nucleos.includes(nucleo.id));
+    },
+    generateDashboard() {
+      const startDate = new Date(this.dashboardStartDate);
+      const endDate = new Date(this.dashboardEndDate);
+      
+      let filteredMovements = this.allVegetalMovements.filter(m => {
+        const movementDate = new Date(m.date);
+        return movementDate >= startDate && 
+               movementDate <= endDate && 
+               this.currentUser.nucleos.includes(m.nucleoId);
+      });
+
+      if (this.selectedDashboardNucleo !== 'all') {
+        filteredMovements = filteredMovements.filter(m => m.nucleoId === this.selectedDashboardNucleo);
+      }
+      
+      this.dashboardData = {
+        totalEntrada: filteredMovements.reduce((sum, m) => sum + m.entrada, 0),
+        totalSaida: filteredMovements.reduce((sum, m) => sum + m.saida, 0),
+        saldo: filteredMovements.reduce((sum, m) => sum + m.entrada - m.saida, 0),
+        totalPessoas: filteredMovements.reduce((sum, m) => sum + m.numPessoas, 0),
+        evolution: this.calculateEvolution(filteredMovements, startDate, endDate)
+      };
+      
+      this.$nextTick(() => {
+        this.renderChart();
+      });
+    },
+    saveUser() {
+      if (this.editingUserId) {
+        const index = this.users.findIndex(u => u.id === this.editingUserId);
+        if (index !== -1) {
+          this.users[index] = { ...this.userForm, id: this.editingUserId };
+        }
+        this.editingUserId = null;
+      } else {
+        this.users.push({ ...this.userForm, id: Date.now() });
+      }
+      this.userForm = { name: '', username: '', password: '', nucleos: [], accessLevelId: null };
+    },
+    editUser(user) {
+      this.editingUserId = user.id;
+      this.userForm = { ...user };
+    },
+    deleteUser(id) {
+      this.users = this.users.filter(u => u.id !== id);
+    },
+    saveNucleo() {
+      if (this.editingNucleoId) {
+        const index = this.nucleos.findIndex(n => n.id === this.editingNucleoId);
+        if (index !== -1) {
+          this.nucleos[index] = { ...this.nucleoForm, id: this.editingNucleoId };
+        }
+        this.editingNucleoId = null;
+      } else {
+        this.nucleos.push({ ...this.nucleoForm, id: Date.now() });
+      }
+      this.nucleoForm = { name: '', region: '', address: '' };
+    },
+    editNucleo(nucleo) {
+      this.editingNucleoId = nucleo.id;
+      this.nucleoForm = { ...nucleo };
+    },
+    deleteNucleo(id) {
+      this.nucleos = this.nucleos.filter(n => n.id !== id);
+    },
+    loadVegetalMovements() {
+      if (this.selectedNucleo) {
+        this.vegetalMovements = this.allVegetalMovements.filter(m => m.nucleoId === this.selectedNucleo);
+      } else {
+        this.vegetalMovements = [];
+      }
+    },
+    saveVegetalMovement() {
+      const lastMovement = this.vegetalMovements[this.vegetalMovements.length - 1];
+      let previousSaldo = lastMovement ? lastMovement.saldo : 0;
+      
+      const newSaldo = previousSaldo + parseFloat(this.vegetalForm.entrada) - parseFloat(this.vegetalForm.saida);
+      
+      const newMovement = {
+        ...this.vegetalForm,
+        saldo: newSaldo,
+        nucleoId: this.selectedNucleo,
+        id: this.editingMovementId || Date.now()
+      };
+      
+      if (this.editingMovementId) {
+        const index = this.vegetalMovements.findIndex(m => m.id === this.editingMovementId);
+        if (index !== -1) {
+          this.vegetalMovements[index] = newMovement;
+        }
+        this.editingMovementId = null;
+      } else {
+        this.vegetalMovements.push(newMovement);
+      }
+      
+      const allIndex = this.allVegetalMovements.findIndex(m => m.id === newMovement.id);
+      if (allIndex !== -1) {
+        this.allVegetalMovements[allIndex] = newMovement;
+      } else {
+        this.allVegetalMovements.push(newMovement);
+      }
+      
+      this.vegetalForm = {
+        date: '',
+        vegetal: '',
+        entrada: 0,
+        saida: 0,
+        saldo: 0,
+        sessao: '',
+        numPessoas: 0,
+        auxiliar: '',
+        mAssistente: '',
+        mRepresentante: ''
+      };
+    },
+    editMovement(movement) {
+      this.editingMovementId = movement.id;
+      this.vegetalForm = { ...movement };
+    },
+    deleteMovement(id) {
+      this.vegetalMovements = this.vegetalMovements.filter(m => m.id !== id);
+    },
+    generateReport() {
+      const selectedNucleo = this.nucleos.find(n => n.id === this.selectedNucleo);
+      this.selectedNucleoName = selectedNucleo ? selectedNucleo.name : '';
+      
+      this.reportData = this.vegetalMovements.filter(m => {
+        const movementDate = new Date(m.date);
+        return movementDate >= new Date(this.reportStartDate) && movementDate <= new Date(this.reportEndDate);
+      });
+    },
+    generatePDF() {
+      this.generateReport();
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      doc.setFontSize(16);
+      doc.text('FICHA DE CONTROLE DE VEGETAL', 150, 20, null, null, 'center');
+      doc.setFontSize(14);
+      doc.text(this.selectedNucleoName, 150, 30, null, null, 'center');
+      
+      doc.setFontSize(10);
+      let y = 50;
+
+      const headers = ['Data', 'Vegetal', 'Entrada', 'Saída', 'Saldo', 'Sessão', 'Nº Pessoas', 'Auxiliar', 'M. Assistente', 'M. Representante'];
+      const columnWidths = [25, 30, 20, 20, 20, 25, 25, 30, 30, 30];
+
+      headers.forEach((header, i) => {
+        doc.cell(10 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), y, columnWidths[i], 10, header, i);
+      });
+
+      y += 10;
+
+      this.reportData.forEach((movement, index) => {
+        const row = [
+          movement.date,
+          movement.vegetal,
+          movement.entrada,
+          movement.saida,
+          movement.saldo,
+          movement.sessao,
+          movement.numPessoas,
+          movement.auxiliar,
+          movement.mAssistente,
+          movement.mRepresentante
+        ];
+
+        row.forEach((cell, i) => {
+          doc.cell(10 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), y, columnWidths[i], 10, cell.toString(), index + 1);
+        });
+
+        y += 10;
+
+        if (y > 190 && index < this.reportData.length - 1) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+
+      y += 20;
+      doc.line(20, y, 100, y);
+      doc.text('M. Assistente', 20, y + 10);
+
+      doc.line(180, y, 260, y);
+      doc.text('M. Representante', 180, y + 10);
+
+      doc.save(`relatorio_${this.selectedNucleoName}.pdf`);
+    },
+    registerUser() {
+      const newUser = {
+        id: Date.now(),
+        name: this.registrationForm.name,
+        username: this.registrationForm.username,
+        password: this.registrationForm.password,
+        nucleos: [],
+        accessLevelId: null
+      };
+      this.users.push(newUser);
+      this.showRegistrationForm = false;
+      this.registrationForm = { name: '', username: '', password: '' };
+      alert('Conta criada com sucesso! Faça login para continuar.');
+    },
+    saveAccessLevel() {
+      if (this.editingAccessLevelId) {
+        const index = this.accessLevels.findIndex(l => l.id === this.editingAccessLevelId);
+        if (index !== -1) {
+          this.accessLevels[index] = { ...this.accessLevelForm, id: this.editingAccessLevelId };
+        }
+        this.editingAccessLevelId = null;
+      } else {
+        this.accessLevels.push({ ...this.accessLevelForm, id: Date.now() });
+      }
+      this.accessLevelForm = { name: '', description: '', screens: [] };
+    },
+    editAccessLevel(level) {
+      this.editingAccessLevelId = level.id;
+      this.accessLevelForm = { ...level };
+    },
+    deleteAccessLevel(id) {
+      this.accessLevels = this.accessLevels.filter(l => l.id !== id);
+    },
+    calculateEvolution(movements, startDate, endDate) {
+      const evolution = [];
+      let currentDate = new Date(startDate);
+      
+      while (currentDate <= endDate) {
+        const dayMovements = movements.filter(m => new Date(m.date).toDateString() === currentDate.toDateString());
+        evolution.push({
+          date: currentDate.toISOString().split('T')[0],
+          entrada: dayMovements.reduce((sum, m) => sum + m.entrada, 0),
+          saida: dayMovements.reduce((sum, m) => sum + m.saida, 0),
+          saldo: dayMovements.reduce((sum, m) => sum + m.entrada - m.saida, 0),
+          numPessoas: dayMovements.reduce((sum, m) => sum + m.numPessoas, 0)
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      return evolution;
+    },
+    renderChart() {
+      const ctx = document.getElementById('evolutionChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: this.dashboardData.evolution.map(e => e.date),
+          datasets: [
+            {
+              label: 'Entrada',
+              data: this.dashboardData.evolution.map(e => e.entrada),
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0
+            },
+            {
+              label: 'Saída',
+              data: this.dashboardData.evolution.map(e => e.saida),
+              borderColor: 'rgb(255, 99, 132)',
+              tension: 0
+            },
+            {
+              label: 'Saldo',
+              data: this.dashboardData.evolution.map(e => e.saldo),
+              borderColor: 'rgb(54, 162, 235)',
+              tension: 0
+            },
+            {
+              label: 'Nº de Pessoas',
+              data: this.dashboardData.evolution.map(e => e.numPessoas),
+              borderColor: 'rgb(255, 206, 86)',
+              tension: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: {
+              type: 'category',
+              position: 'bottom'
+            },
+            y: {
+              type: 'linear',
+              position: 'left'
+            }
+          }
+        }
+      });
+    },
+    generateLast30DaysDashboard() {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      this.dashboardStartDate = startDate.toISOString().split('T')[0];
+      this.dashboardEndDate = endDate.toISOString().split('T')[0];
+      this.selectedDashboardNucleo = 'all';
+      this.generateDashboard();
+    }
+  },
+  created() {
+    this.nucleos = [
+      { id: 1, name: 'Núcleo A', region: 'Norte', address: 'Rua A, 123' },
+      { id: 2, name: 'Núcleo B', region: 'Sul', address: 'Rua B, 456' },
+    ];
+    this.users.push({ id: 1, name: 'João Silva', username: 'joao', password: '123', nucleos: [1], accessLevelId: 1 });
+    this.users.push({ id: 2, name: 'Maria Santos', username: 'maria', password: '456', nucleos: [1, 2], accessLevelId: 2 });
+    this.allVegetalMovements = [
+      { id: 1, nucleoId: 1, date: '2023-05-01', vegetal: 'Mariri', entrada: 10, saida: 5, saldo: 5, sessao: 'Sessão 1', numPessoas: 20, auxiliar: 'João', mAssistente: 'Maria', mRepresentante: 'Pedro' },
+    ];
+    this.vegetalMovements = [];
+    this.accessLevels = [
+      { id: 1, name: 'Administrador', description: 'Acesso total', screens: [1, 2, 3, 4, 5, 6] },
+      { id: 2, name: 'Usuário', description: 'Acesso limitado', screens: [3, 4, 6] }
+    ];
+    
+    this.users[0].nucleos = this.nucleos.map(nucleo => nucleo.id);
+    if (this.currentUser) {
+      this.generateLast30DaysDashboard();
+    }
+  }
+});
+</script>
+</body>
+</html>
